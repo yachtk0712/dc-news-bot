@@ -9,6 +9,7 @@ on:
 jobs:
   send-news:
     runs-on: ubuntu-latest
+    timeout-minutes: 5   # 5분 넘게 걸리면 자동으로 중단 (무한 대기 방지)
     steps:
       - name: 저장소 체크아웃
         uses: actions/checkout@v4
