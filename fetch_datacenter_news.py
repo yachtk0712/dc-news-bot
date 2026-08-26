@@ -168,6 +168,7 @@ def collect_news():
                 "title": translated_title,
                 "summary": translated_summary,
                 "link": link,
+                "is_korean": is_korean,
             })
 
     # 중복 제거 (제목 기준)
@@ -180,7 +181,15 @@ def collect_news():
         seen.add(key)
         deduped.append(item)
 
-    return deduped[:MAX_ITEMS]
+    # 해외 기사만 있고 국내 기사가 뒤로 밀려 잘려나가지 않도록, 국내/해외 자리를 나눠서 확보
+    korean_items = [i for i in deduped if i["is_korean"]]
+    foreign_items = [i for i in deduped if not i["is_korean"]]
+
+    max_korean = min(len(korean_items), MAX_ITEMS // 2 + 2)  # 최대 절반+2건까지는 국내 우선 확보
+    remaining = MAX_ITEMS - max_korean
+
+    final_items = korean_items[:max_korean] + foreign_items[:remaining]
+    return final_items
 
 
 def build_html_email(items):
