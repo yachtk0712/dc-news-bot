@@ -185,7 +185,9 @@ def collect_news():
     korean_items = [i for i in deduped if i["is_korean"]]
     foreign_items = [i for i in deduped if not i["is_korean"]]
 
-    max_korean = min(len(korean_items), MAX_ITEMS // 2 + 2)  # 최대 절반+2건까지는 국내 우선 확보
+    # 국내/해외 기사를 정확히 절반씩 확보 (한쪽이 부족하면 남는 자리는 다른 쪽으로 채움)
+    half = MAX_ITEMS // 2
+    max_korean = min(len(korean_items), half)
     remaining = MAX_ITEMS - max_korean
 
     final_items = korean_items[:max_korean] + foreign_items[:remaining]
