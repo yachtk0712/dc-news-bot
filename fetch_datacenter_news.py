@@ -23,6 +23,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 import feedparser
+from deep_translator import GoogleTranslator
 
 # ---------------------------------------------------------------------------
 # 1. 설정: RSS 피드 목록 (자유롭게 추가/삭제 가능)
@@ -49,6 +50,19 @@ LOOKBACK_DAYS = 2
 
 # 뉴스레터에 최대 몇 개까지 포함할지
 MAX_ITEMS = 10
+
+# 한글로 번역할지 여부 (Claude/OpenAI API 아님, 무료 Google 번역 라이브러리 사용)
+TRANSLATE_TO_KOREAN = True
+
+
+def translate_ko(text: str) -> str:
+    if not TRANSLATE_TO_KOREAN or not text:
+        return text
+    try:
+        return GoogleTranslator(source="auto", target="ko").translate(text)
+    except Exception as e:
+        print(f"[경고] 번역 실패, 원문 그대로 사용: {e}")
+        return text
 
 
 def is_relevant(title: str, summary: str) -> bool:
@@ -91,10 +105,12 @@ def collect_news():
             if not is_relevant(title, summary):
                 continue
 
+            trimmed_summary = summary[:220] + ("…" if len(summary) > 220 else "")
+
             items.append({
                 "source": source_name,
-                "title": title,
-                "summary": summary[:220] + ("…" if len(summary) > 220 else ""),
+                "title": translate_ko(title),
+                "summary": translate_ko(trimmed_summary),
                 "link": link,
             })
 
@@ -122,10 +138,13 @@ def build_html_email(items):
             rows.append(f"""
             <div style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #eee;">
                 <div style="font-size:12px; color:#888; margin-bottom:4px;">{item['source']}</div>
-                <a href="{item['link']}" style="font-size:16px; font-weight:600; color:#111; text-decoration:none;">
+                <a href="{item['link']}" style="font-size:16px; font-weight:600; color:#1a56db; text-decoration:underline;">
                     {item['title']}
                 </a>
-                <p style="font-size:14px; color:#555; margin:6px 0 0; line-height:1.6;">{item['summary']}</p>
+                <p style="font-size:14px; color:#555; margin:6px 0 8px; line-height:1.6;">{item['summary']}</p>
+                <a href="{item['link']}" style="font-size:13px; color:#1a56db; text-decoration:underline;">
+                    원문 보기 →
+                </a>
             </div>
             """)
         body_html = "".join(rows)
