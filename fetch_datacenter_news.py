@@ -36,14 +36,17 @@ socket.setdefaulttimeout(12)
 RSS_FEEDS = [
     # (매체명, RSS 주소, 이미 한국어인지 여부)
     ("Data Center Knowledge", "https://www.datacenterknowledge.com/rss.xml", False),
-    ("Data Center Dynamics", "https://www.datacenterdynamics.com/en/rss/", False),
-    ("Data Center Frontier", "https://www.datacenterfrontier.com/rss.xml", False),
+    ("Data Center Frontier", "https://www.datacenterfrontier.com/feed", False),
+    ("Data Center Post", "https://datacenterpost.com/feed/", False),
+    ("Datacenters.com", "https://www.datacenters.com/news.atom", False),
     ("Utility Dive", "https://www.utilitydive.com/feeds/news/", False),
-    ("Reuters Technology", "https://www.reutersagency.com/feed/?best-topics=tech", False),
     # 국내 매체 (이미 한국어라 번역 생략)
     ("전자신문 · 오늘의 뉴스", "http://rss.etnews.com/Section901.xml", True),
     ("전자신문 · AI", "http://rss.etnews.com/04046.xml", True),
     ("전자신문 · 통신", "http://rss.etnews.com/03.xml", True),
+    ("전자신문 · 전자", "http://rss.etnews.com/06.xml", True),
+    # 구글 뉴스에서 "데이터센터" 키워드로 직접 검색한 국내 뉴스 (특정 매체에 국한되지 않음)
+    ("구글 뉴스 · 데이터센터 검색", "https://news.google.com/rss/search?q=%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0&hl=ko&gl=KR&ceid=KR:ko", True),
 ]
 
 # 해외 기사 필터링용 키워드 (영문)
@@ -62,10 +65,10 @@ KEYWORDS_KO = [
 ]
 
 # 최근 며칠 이내 기사만 포함할지
-LOOKBACK_DAYS = 2
+LOOKBACK_DAYS = 3
 
 # 뉴스레터에 최대 몇 개까지 포함할지
-MAX_ITEMS = 10
+MAX_ITEMS = 14
 
 # 한글로 번역할지 여부 (Claude/OpenAI API 아님, 무료 번역 라이브러리 사용)
 TRANSLATE_TO_KOREAN = True
