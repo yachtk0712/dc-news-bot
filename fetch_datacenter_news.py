@@ -18,6 +18,7 @@ import os
 import re
 import smtplib
 import ssl
+import time
 from datetime import datetime, timedelta, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -54,15 +55,34 @@ MAX_ITEMS = 10
 # 한글로 번역할지 여부 (Claude/OpenAI API 아님, 무료 Google 번역 라이브러리 사용)
 TRANSLATE_TO_KOREAN = True
 
+# 번역 서비스가 과부하로 에러 페이지를 돌려줄 때 나타나는 특징적인 문구
+_TRANSLATE_ERROR_SIGNATURES = [
+    "error 500", "server error", "please try again later",
+    "that's an error", "that’s an error",
+]
+
+
+def _looks_like_error_page(text: str) -> bool:
+    lowered = text.lower()
+    return any(sig in lowered for sig in _TRANSLATE_ERROR_SIGNATURES)
+
 
 def translate_ko(text: str) -> str:
     if not TRANSLATE_TO_KOREAN or not text:
         return text
-    try:
-        return GoogleTranslator(source="auto", target="ko").translate(text)
-    except Exception as e:
-        print(f"[경고] 번역 실패, 원문 그대로 사용: {e}")
-        return text
+
+    for attempt in range(2):  # 실패하면 한 번 더 재시도
+        try:
+            result = GoogleTranslator(source="auto", target="ko").translate(text)
+            if result and not _looks_like_error_page(result):
+                return result
+            print(f"[경고] 번역 서비스가 에러 페이지를 반환함, 재시도 {attempt + 1}/2")
+        except Exception as e:
+            print(f"[경고] 번역 실패 (시도 {attempt + 1}/2): {e}")
+        time.sleep(2)  # 잠시 대기 후 재시도
+
+    print("[경고] 번역에 계속 실패하여 원문을 그대로 사용합니다.")
+    return text
 
 
 def is_relevant(title: str, summary: str) -> bool:
@@ -107,10 +127,15 @@ def collect_news():
 
             trimmed_summary = summary[:220] + ("…" if len(summary) > 220 else "")
 
+            translated_title = translate_ko(title)
+            time.sleep(0.6)
+            translated_summary = translate_ko(trimmed_summary)
+            time.sleep(0.6)
+
             items.append({
                 "source": source_name,
-                "title": translate_ko(title),
-                "summary": translate_ko(trimmed_summary),
+                "title": translated_title,
+                "summary": translated_summary,
                 "link": link,
             })
 
