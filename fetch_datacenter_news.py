@@ -30,20 +30,31 @@ from deep_translator import GoogleTranslator
 # 1. 설정: RSS 피드 목록 (자유롭게 추가/삭제 가능)
 # ---------------------------------------------------------------------------
 RSS_FEEDS = [
-    ("Data Center Knowledge", "https://www.datacenterknowledge.com/rss.xml"),
-    ("Data Center Dynamics", "https://www.datacenterdynamics.com/en/rss/"),
-    ("Data Center Frontier", "https://www.datacenterfrontier.com/rss.xml"),
-    ("Utility Dive", "https://www.utilitydive.com/feeds/news/"),
-    ("Reuters Technology", "https://www.reutersagency.com/feed/?best-topics=tech"),
+    # (매체명, RSS 주소, 이미 한국어인지 여부)
+    ("Data Center Knowledge", "https://www.datacenterknowledge.com/rss.xml", False),
+    ("Data Center Dynamics", "https://www.datacenterdynamics.com/en/rss/", False),
+    ("Data Center Frontier", "https://www.datacenterfrontier.com/rss.xml", False),
+    ("Utility Dive", "https://www.utilitydive.com/feeds/news/", False),
+    ("Reuters Technology", "https://www.reutersagency.com/feed/?best-topics=tech", False),
+    # 국내 매체 (이미 한국어라 번역 생략)
+    ("전자신문 · 오늘의 뉴스", "http://rss.etnews.com/Section901.xml", True),
+    ("전자신문 · AI", "http://rss.etnews.com/04046.xml", True),
+    ("전자신문 · 통신", "http://rss.etnews.com/03.xml", True),
 ]
 
-# 이 키워드 중 하나라도 제목/요약에 포함되면 채택 (대소문자 무시)
-KEYWORDS = [
+# 해외 기사 필터링용 키워드 (영문)
+KEYWORDS_EN = [
     "data center", "datacenter", "hyperscale", "hyperscaler",
     "power grid", "grid interconnect", "interconnection queue",
     "AI infrastructure", "gigawatt", "megawatt", "nuclear power",
     "electricity demand", "utility", "cooling", "FERC", "PJM", "ERCOT",
     "server farm", "cloud infrastructure",
+]
+
+# 국내 기사 필터링용 키워드 (국문)
+KEYWORDS_KO = [
+    "데이터센터", "데이터 센터", "하이퍼스케일", "전력망", "전력 수요",
+    "AI 인프라", "냉각", "발전기", "전력 계통", "인공지능 반도체",
 ]
 
 # 최근 며칠 이내 기사만 포함할지
@@ -52,13 +63,13 @@ LOOKBACK_DAYS = 2
 # 뉴스레터에 최대 몇 개까지 포함할지
 MAX_ITEMS = 10
 
-# 한글로 번역할지 여부 (Claude/OpenAI API 아님, 무료 Google 번역 라이브러리 사용)
+# 한글로 번역할지 여부 (Claude/OpenAI API 아님, 무료 번역 라이브러리 사용)
 TRANSLATE_TO_KOREAN = True
 
 # 번역 서비스가 과부하로 에러 페이지를 돌려줄 때 나타나는 특징적인 문구
 _TRANSLATE_ERROR_SIGNATURES = [
     "error 500", "server error", "please try again later",
-    "that's an error", "that’s an error",
+    "that's an error", "that’s an error", "429", "too many requests",
 ]
 
 
@@ -68,26 +79,35 @@ def _looks_like_error_page(text: str) -> bool:
 
 
 def translate_ko(text: str) -> str:
+    """무료 번역 서비스를 순서대로 시도한다. 하나가 막히면 다음 서비스로 넘어간다."""
     if not TRANSLATE_TO_KOREAN or not text:
         return text
 
-    for attempt in range(2):  # 실패하면 한 번 더 재시도
-        try:
-            result = GoogleTranslator(source="auto", target="ko").translate(text)
-            if result and not _looks_like_error_page(result):
-                return result
-            print(f"[경고] 번역 서비스가 에러 페이지를 반환함, 재시도 {attempt + 1}/2")
-        except Exception as e:
-            print(f"[경고] 번역 실패 (시도 {attempt + 1}/2): {e}")
-        time.sleep(2)  # 잠시 대기 후 재시도
+    from deep_translator import MyMemoryTranslator
 
-    print("[경고] 번역에 계속 실패하여 원문을 그대로 사용합니다.")
+    translators = [
+        lambda t: GoogleTranslator(source="auto", target="ko").translate(t),
+        lambda t: MyMemoryTranslator(source="en-GB", target="ko-KR").translate(t),
+    ]
+
+    for translate_fn in translators:
+        for attempt in range(2):
+            try:
+                result = translate_fn(text)
+                if result and not _looks_like_error_page(result):
+                    return result
+            except Exception as e:
+                print(f"[경고] 번역 시도 실패: {e}")
+            time.sleep(1.5)
+
+    print("[경고] 모든 번역 서비스 실패, 원문을 그대로 사용합니다.")
     return text
 
 
-def is_relevant(title: str, summary: str) -> bool:
+def is_relevant(title: str, summary: str, is_korean: bool) -> bool:
     text = f"{title} {summary}".lower()
-    return any(kw.lower() in text for kw in KEYWORDS)
+    keywords = KEYWORDS_KO if is_korean else KEYWORDS_EN
+    return any(kw.lower() in text for kw in keywords)
 
 
 def is_recent(entry) -> bool:
@@ -106,7 +126,7 @@ def clean_html(raw: str) -> str:
 
 def collect_news():
     items = []
-    for source_name, url in RSS_FEEDS:
+    for source_name, url, is_korean in RSS_FEEDS:
         try:
             feed = feedparser.parse(url)
         except Exception as e:
@@ -122,15 +142,19 @@ def collect_news():
                 continue
             if not is_recent(entry):
                 continue
-            if not is_relevant(title, summary):
+            if not is_relevant(title, summary, is_korean):
                 continue
 
             trimmed_summary = summary[:220] + ("…" if len(summary) > 220 else "")
 
-            translated_title = translate_ko(title)
-            time.sleep(0.6)
-            translated_summary = translate_ko(trimmed_summary)
-            time.sleep(0.6)
+            if is_korean:
+                translated_title = title
+                translated_summary = trimmed_summary
+            else:
+                translated_title = translate_ko(title)
+                time.sleep(0.6)
+                translated_summary = translate_ko(trimmed_summary)
+                time.sleep(0.6)
 
             items.append({
                 "source": source_name,
