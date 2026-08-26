@@ -17,6 +17,7 @@
 import os
 import re
 import smtplib
+import socket
 import ssl
 import time
 from datetime import datetime, timedelta, timezone
@@ -25,6 +26,9 @@ from email.mime.text import MIMEText
 
 import feedparser
 from deep_translator import GoogleTranslator
+
+# 네트워크 요청이 응답 없이 무한정 멈춰있지 않도록 전역 타임아웃 설정 (초)
+socket.setdefaulttimeout(12)
 
 # ---------------------------------------------------------------------------
 # 1. 설정: RSS 피드 목록 (자유롭게 추가/삭제 가능)
@@ -98,7 +102,7 @@ def translate_ko(text: str) -> str:
                     return result
             except Exception as e:
                 print(f"[경고] 번역 시도 실패: {e}")
-            time.sleep(1.5)
+            time.sleep(0.8)
 
     print("[경고] 모든 번역 서비스 실패, 원문을 그대로 사용합니다.")
     return text
