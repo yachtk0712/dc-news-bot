@@ -64,6 +64,13 @@ KEYWORDS_KO = [
     "AI 인프라", "냉각", "발전기", "전력 계통", "인공지능 반도체",
 ]
 
+# 엣지 데이터센터 전용 검색 (일반 국내/해외 목록과 별개로 최대 3건 추가 확보)
+EDGE_FEEDS = [
+    ("Google News · Edge Data Center", "https://news.google.com/rss/search?q=%22edge+data+center%22&hl=en-US&gl=US&ceid=US:en", False),
+    ("구글 뉴스 · 엣지 데이터센터 검색", "https://news.google.com/rss/search?q=%EC%97%A3%EC%A7%80+%EB%8D%B0%EC%9D%B4%ED%84%B0%EC%84%BC%ED%84%B0&hl=ko&gl=KR&ceid=KR:ko", True),
+]
+MAX_EDGE_ITEMS = 3
+
 # 최근 며칠 이내 기사만 포함할지
 LOOKBACK_DAYS = 3
 
@@ -131,6 +138,56 @@ def clean_html(raw: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def collect_edge_items(seen_titles):
+    """엣지 데이터센터 관련 기사를 별도로 최대 MAX_EDGE_ITEMS건 수집한다."""
+    edge_items = []
+    for source_name, url, is_korean in EDGE_FEEDS:
+        try:
+            feed = feedparser.parse(url)
+        except Exception as e:
+            print(f"[경고] {source_name} 피드를 가져오지 못했습니다: {e}")
+            continue
+
+        for entry in feed.entries:
+            title = entry.get("title", "").strip()
+            summary = clean_html(entry.get("summary", entry.get("description", "")))
+            link = entry.get("link", "")
+
+            if not title or not link:
+                continue
+            if not is_recent(entry):
+                continue
+
+            key = title.lower()
+            if key in seen_titles:
+                continue
+            seen_titles.add(key)
+
+            trimmed_summary = summary[:220] + ("…" if len(summary) > 220 else "")
+
+            if is_korean:
+                translated_title = title
+                translated_summary = trimmed_summary
+            else:
+                translated_title = translate_ko(title)
+                time.sleep(0.6)
+                translated_summary = translate_ko(trimmed_summary)
+                time.sleep(0.6)
+
+            edge_items.append({
+                "source": f"{source_name} (Edge)",
+                "title": translated_title,
+                "summary": translated_summary,
+                "link": link,
+                "is_korean": is_korean,
+            })
+
+            if len(edge_items) >= MAX_EDGE_ITEMS:
+                return edge_items
+
+    return edge_items
+
+
 def collect_news():
     items = []
     for source_name, url, is_korean in RSS_FEEDS:
@@ -191,7 +248,12 @@ def collect_news():
     remaining = MAX_ITEMS - max_korean
 
     final_items = korean_items[:max_korean] + foreign_items[:remaining]
-    return final_items
+
+    # 엣지 데이터센터 전용 기사를 별도로 추가 (이미 포함된 제목과 중복되지 않게)
+    seen_titles = {i["title"].lower() for i in final_items}
+    edge_items = collect_edge_items(seen_titles)
+
+    return final_items + edge_items
 
 
 def build_html_email(items):
