@@ -71,6 +71,32 @@ EDGE_FEEDS = [
 ]
 MAX_EDGE_ITEMS = 3
 
+# ---------------------------------------------------------------------------
+# 중요도 점수 매기기 (Claude/AI API 아님, 키워드 가중치 기반 무료 방식)
+# ---------------------------------------------------------------------------
+IMPORTANCE_WEIGHTS = {
+    # 규제/정책 관련 - 산업 전체에 영향을 주므로 가중치 높음
+    "ferc": 3, "규제": 3, "moratorium": 3, "잠정 중단": 3, "중단": 2,
+    "정책": 2, "law": 2, "법안": 2, "제재": 2, "pjm": 2, "ercot": 2,
+
+    # 대규모 투자/계약 - 금액이 클수록 중요
+    "billion": 3, "억 달러": 3, "조원": 3, "억원": 2, "투자": 2,
+    "계약": 2, "수주": 2, "gigawatt": 2, "gw": 2, "기가와트": 2,
+
+    # 전력/인프라 병목 - 산업 구조적 이슈
+    "전력망": 2, "전력 수요": 2, "power grid": 2, "blackout": 3, "정전": 3,
+    "발전소": 2, "nuclear": 2, "원전": 2,
+
+    # 대기업/빅테크 동향
+    "microsoft": 1, "google": 1, "amazon": 1, "meta": 1, "nvidia": 1,
+    "openai": 1, "삼성": 1, "sk": 1, "네이버": 1, "카카오": 1,
+}
+
+
+def importance_score(title: str, summary: str) -> int:
+    text = f"{title} {summary}".lower()
+    return sum(weight for kw, weight in IMPORTANCE_WEIGHTS.items() if kw in text)
+
 # 최근 며칠 이내 기사만 포함할지
 LOOKBACK_DAYS = 3
 
@@ -180,6 +206,7 @@ def collect_edge_items(seen_titles):
                 "summary": translated_summary,
                 "link": link,
                 "is_korean": is_korean,
+                "score": importance_score(title, summary),
             })
 
             if len(edge_items) >= MAX_EDGE_ITEMS:
@@ -226,6 +253,7 @@ def collect_news():
                 "summary": translated_summary,
                 "link": link,
                 "is_korean": is_korean,
+                "score": importance_score(title, summary),
             })
 
     # 중복 제거 (제목 기준)
@@ -241,6 +269,10 @@ def collect_news():
     # 해외 기사만 있고 국내 기사가 뒤로 밀려 잘려나가지 않도록, 국내/해외 자리를 나눠서 확보
     korean_items = [i for i in deduped if i["is_korean"]]
     foreign_items = [i for i in deduped if not i["is_korean"]]
+
+    # 각 그룹 안에서는 중요도 점수가 높은 기사가 먼저 오도록 정렬
+    korean_items.sort(key=lambda i: i["score"], reverse=True)
+    foreign_items.sort(key=lambda i: i["score"], reverse=True)
 
     # 국내/해외 기사를 정확히 절반씩 확보 (한쪽이 부족하면 남는 자리는 다른 쪽으로 채움)
     half = MAX_ITEMS // 2
@@ -264,12 +296,15 @@ def build_html_email(items):
     else:
         rows = []
         for item in items:
+            badge = ""
+            if item.get("score", 0) >= 4:
+                badge = '<span style="background:#fef3c7; color:#92400e; font-size:11px; font-weight:700; padding:2px 8px; border-radius:10px; margin-left:6px;">★ 중요</span>'
             rows.append(f"""
             <div style="margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #eee;">
                 <div style="font-size:12px; color:#888; margin-bottom:4px;">{item['source']}</div>
                 <a href="{item['link']}" style="font-size:16px; font-weight:600; color:#1a56db; text-decoration:underline;">
                     {item['title']}
-                </a>
+                </a>{badge}
                 <p style="font-size:14px; color:#555; margin:6px 0 8px; line-height:1.6;">{item['summary']}</p>
                 <a href="{item['link']}" style="font-size:13px; color:#1a56db; text-decoration:underline;">
                     원문 보기 →
