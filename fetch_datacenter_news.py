@@ -21,8 +21,10 @@ import socket
 import ssl
 import time
 from datetime import datetime, timedelta, timezone
+from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 
 import feedparser
 from deep_translator import GoogleTranslator
@@ -97,6 +99,9 @@ def importance_score(title: str, summary: str) -> int:
     text = f"{title} {summary}".lower()
     return sum(weight for kw, weight in IMPORTANCE_WEIGHTS.items() if kw in text)
 
+# 이메일 보낸사람 표시 이름 (비워두면 이메일 주소만 표시됨)
+SENDER_DISPLAY_NAME = "삼성물산 에너지사업부 강재성 프로"
+
 # 최근 며칠 이내 기사만 포함할지
 LOOKBACK_DAYS = 3
 
@@ -164,6 +169,20 @@ def clean_html(raw: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def translate_title_and_summary(title: str, summary: str):
+    """제목+요약을 한 번에 묶어서 번역해 API 호출 횟수를 절반으로 줄인다."""
+    combined = f"{title}\n---\n{summary}"
+    translated_combined = translate_ko(combined)
+    time.sleep(0.6)
+
+    if "---" in translated_combined:
+        parts = translated_combined.split("---", 1)
+        return parts[0].strip(), parts[1].strip()
+
+    # 구분자가 번역 과정에서 사라진 경우, 안전하게 개별 번역으로 대체
+    return translate_ko(title), translate_ko(summary)
+
+
 def collect_edge_items(seen_titles):
     """엣지 데이터센터 관련 기사를 별도로 최대 MAX_EDGE_ITEMS건 수집한다."""
     edge_items = []
@@ -192,13 +211,9 @@ def collect_edge_items(seen_titles):
             trimmed_summary = summary[:220] + ("…" if len(summary) > 220 else "")
 
             if is_korean:
-                translated_title = title
-                translated_summary = trimmed_summary
+                translated_title, translated_summary = title, trimmed_summary
             else:
-                translated_title = translate_ko(title)
-                time.sleep(0.6)
-                translated_summary = translate_ko(trimmed_summary)
-                time.sleep(0.6)
+                translated_title, translated_summary = translate_title_and_summary(title, trimmed_summary)
 
             edge_items.append({
                 "source": f"{source_name} (Edge)",
@@ -239,13 +254,9 @@ def collect_news():
             trimmed_summary = summary[:220] + ("…" if len(summary) > 220 else "")
 
             if is_korean:
-                translated_title = title
-                translated_summary = trimmed_summary
+                translated_title, translated_summary = title, trimmed_summary
             else:
-                translated_title = translate_ko(title)
-                time.sleep(0.6)
-                translated_summary = translate_ko(trimmed_summary)
-                time.sleep(0.6)
+                translated_title, translated_summary = translate_title_and_summary(title, trimmed_summary)
 
             items.append({
                 "source": source_name,
@@ -335,7 +346,10 @@ def send_email(html_body: str):
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"[DCNI] 데이터센터 산업 뉴스 - {datetime.now().strftime('%Y-%m-%d')}"
-    msg["From"] = smtp_user
+    if SENDER_DISPLAY_NAME:
+        msg["From"] = formataddr((str(Header(SENDER_DISPLAY_NAME, "utf-8")), smtp_user))
+    else:
+        msg["From"] = smtp_user
     msg["To"] = mail_to
 
     msg.attach(MIMEText(html_body, "html"))
