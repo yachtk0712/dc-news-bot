@@ -99,6 +99,7 @@ def importance_score(title: str, summary: str) -> int:
     text = f"{title} {summary}".lower()
     return sum(weight for kw, weight in IMPORTANCE_WEIGHTS.items() if kw in text)
 
+
 # 이메일 보낸사람 표시 이름 (비워두면 이메일 주소만 표시됨)
 SENDER_DISPLAY_NAME = "삼성물산 에너지사업부 강재성 프로"
 
@@ -327,7 +328,7 @@ def build_html_email(items):
     return f"""
     <div style="font-family: -apple-system, Arial, sans-serif; max-width:640px; margin:0 auto;">
         <div style="background:#0b0f1a; color:#fff; padding:20px 24px; border-radius:8px 8px 0 0;">
-            <div style="font-size:18px; font-weight:700;">DCNI · Data Center Industry News</div>
+            <div style="font-size:18px; font-weight:700;">DCIN · Data Center Industry News</div>
             <div style="font-size:13px; opacity:0.75; margin-top:6px;">{today}</div>
         </div>
         <div style="border:1px solid #eee; border-top:none; padding:20px 24px; border-radius:0 0 8px 8px;">
@@ -345,7 +346,7 @@ def send_email(html_body: str):
     mail_to = os.environ["MAIL_TO"]
 
     msg = MIMEMultipart("alternative")
-    msg["Subject"] = f"[DCNI] 데이터센터 산업 뉴스 - {datetime.now().strftime('%Y-%m-%d')}"
+    msg["Subject"] = f"[DCIN] 데이터센터 산업 뉴스 - {datetime.now().strftime('%Y-%m-%d')}"
     if SENDER_DISPLAY_NAME:
         msg["From"] = formataddr((str(Header(SENDER_DISPLAY_NAME, "utf-8")), smtp_user))
     else:
